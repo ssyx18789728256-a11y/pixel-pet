@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI电子宠物小站</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
+    .animate-bounce-slow{animation:bounce 3s infinite}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+// 存储工具（使用 localStorage）
+const storage = {
+  get: (key) => {
+    try {
+      const val = localStorage.getItem(key);
+      return val ? { value: val } : null;
+    } catch(e) { return null; }
+  },
+  set: (key, val) => {
+    try {
+      localStorage.setItem(key, val);
+      return { key, value: val };
+    } catch(e) { return null; }
+  },
+  delete: (key) => {
+    try {
+      localStorage.removeItem(key);
+      return { key, deleted: true };
+    } catch(e) { return null; }
+  }
+};
+
+// 图标组件
+const Icon = ({ name, size = 20, className = "" }) => {
+  const icons = {
+    heart: <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>,
+    utensils: <><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></>,
+    sparkles: <><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></>,
+    messageCircle: <><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></>,
+    star: <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>,
+    clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
+    play: <polygon points="5 3 19 12 5 21 5 3"/>,
+    pause: <><rect width="4" height="16" x="6" y="4"/><rect width="4" height="16" x="14" y="4"/></>,
+    rotateCcw: <><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></>,
+    award: <><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></>,
+    logOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></>,
+    user: <><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>
+  };
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      {icons[name]}
+    </svg>
+  );
+};
+
+function PixelPet() {
+  const [authMode, setAuthMode] = useState('login');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [selectedPet, setSelectedPet] = useState(null);
+  const [petName, setPetName] = useState('');
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [petStats, setPetStats] = useState({ hunger: 80, happiness: 80, health: 100 });
+  const [petMood, setPetMood] = useState('happy');
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [chatHistory, setChatHistory] = useState([]);
+  const [petResponse, setPetResponse] = useState('');
+  const [pomodoroOpen, setPomodoroOpen] = useState(false);
+  const [pomodoroTime, setPomodoroTime] = useState(25 * 60);
+  const [customMinutes, setCustomMinutes] = useState(25);
+  const [pomodoroRunning, setPomodoroRunning] = useState(false);
+  const [pomodoroCompleted, setPomodoroCompleted] = useState(0);
+  const [foodRewards, setFoodRewards] = useState(0);
+  const [showReward, setShowReward] = useState(false);
+
+  const pets = [
+    { id: 'cat', name: '小猫咪', emoji: '🐱', color: '#FFB6C1' },
+    { id: 'dog', name: '小狗狗', emoji: '🐶', color: '#87CEEB' },
+    { id: 'rabbit', name: '小兔兔', emoji: '🐰', color: '#DDA0DD' },
+    { id: 'bear', name: '小熊熊', emoji: '🐻', color: '#F4A460' },
+  ];
+
+  useEffect(() => {
+    const session = storage.get('current_session');
+    if (session && session.value) {
+      const data = JSON.parse(session.value);
+      loadUserData(data.username);
+    } else {
+      setInitialLoading(false);
+    }
+  }, []);
+
+  const loadUserData = (user) => {
+    const data = storage.get('pet_data_' + user);
+    if (data && data.value) {
+      const p = JSON.parse(data.value);
+      setCurrentUser(user);
+      setGameStarted(p.gameStarted || false);
+      setSelectedPet(p.selectedPet || null);
+      setPetName(p.petName || '');
+      setPetStats(p.petStats || { hunger: 80, happiness: 80, health: 100 });
+      setPomodoroCompleted(p.pomodoroCompleted || 0);
+      setFoodRewards(p.foodRewards || 0);
+      setChatHistory(p.chatHistory || []);
+    } else {
+      setCurrentUser(user);
+    }
+    setInitialLoading(false);
+  };
+
+  const saveUserData = () => {
+    if (!currentUser) return;
+    const data = { gameStarted, selectedPet, petName, petStats, pomodoroCompleted, foodRewards, chatHistory, lastSaved: Date.now() };
+    storage.set('pet_data_' + currentUser, JSON.stringify(data));
+  };
+
+  useEffect(() => {
+    if (currentUser && gameStarted) {
+      const t = setTimeout(saveUserData, 1000);
+      return () => clearTimeout(t);
+    }
+  }, [petStats, pomodoroCompleted, foodRewards, chatHistory, gameStarted, currentUser]);
+
+  const handleRegister = () => {
+    if (!username.trim()) { setAuthError('请填写用户名'); return; }
+    if (username.trim().length < 2) { setAuthError('用户名至少2个字符'); return; }
+    if (!password.trim()) { setAuthError('请填写密码'); return; }
+    if (password.length < 4) { setAuthError('密码至少4位'); return; }
+    setAuthLoading(true);
+    setAuthError('');
+    const existing = storage.get('user_' + username.trim());
+    if (existing && existing.value) { setAuthError('用户名已存在'); setAuthLoading(false); return; }
+    storage.set('user_' + username.trim(), JSON.stringify({ password, createdAt: Date.now() }));
+    storage.set('current_session', JSON.stringify({ username: username.trim() }));
+    setCurrentUser(username.trim());
+    setUsername('');
+    setPassword('');
+    setAuthLoading(false);
+  };
+
+  const handleLogin = () => {
+    if (!username.trim()) { setAuthError('请填写用户名'); return; }
+    if (!password.trim()) { setAuthError('请填写密码'); return; }
+    setAuthLoading(true);
+    setAuthError('');
+    const userData = storage.get('user_' + username.trim());
+    if (!userData || !userData.value) { setAuthError('用户不存在'); setAuthLoading(false); return; }
+    const parsed = JSON.parse(userData.value);
+    if (parsed.password !== password) { setAuthError('密码错误'); setAuthLoading(false); return; }
+    storage.set('current_session', JSON.stringify({ username: username.trim() }));
+    loadUserData(username.trim());
+    setUsername('');
+    setPassword('');
+    setAuthLoading(false);
+  };
+
+  const handleLogout = () => {
+    saveUserData();
+    storage.delete('current_session');
+    setCurrentUser(null);
+    setGameStarted(false);
+    setSelectedPet(null);
+    setPetName('');
+    setShowNameInput(false);
+    setPetStats({ hunger: 80, happiness: 80, health: 100 });
+    setPomodoroCompleted(0);
+    setFoodRewards(0);
+    setChatHistory([]);
+  };
+
+  useEffect(() => {
+    if (!gameStarted) return;
+    const interval = setInterval(() => {
+      setPetStats(prev => ({
+        hunger: Math.max(0, prev.hunger - 1),
+        happiness: Math.max(0, prev.happiness - 0.5),
+        health: Math.max(0, prev.health - 0.3),
+      }));
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [gameStarted]);
+
+  useEffect(() => {
+    if (!pomodoroRunning || pomodoroTime <= 0) return;
+    const timer = setInterval(() => {
+      setPomodoroTime(prev => {
+        if (prev <= 1) {
+          setPomodoroRunning(false);
+          setPomodoroCompleted(c => c + 1);
+          setFoodRewards(f => f + 1);
+          setShowReward(true);
+          setTimeout(() => setShowReward(false), 3000);
+          setPetResponse('你完成番茄钟啦!我好骄傲! 🎉');
+          setTimeout(() => setPetResponse(''), 3000);
+          return customMinutes * 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [pomodoroRunning, pomodoroTime, customMinutes]);
+
+  useEffect(() => {
+    const avg = (petStats.hunger + petStats.happiness + petStats.health) / 3;
+    setPetMood(avg > 70 ? 'happy' : avg > 40 ? 'normal' : 'sad');
+  }, [petStats]);
+
+  const showMsg = (msg) => { setPetResponse(msg); setTimeout(() => setPetResponse(''), 3000); };
+  const feedPet = () => { setPetStats(p => ({ ...p, hunger: Math.min(100, p.hunger + 20), happiness: Math.min(100, p.happiness + 5) })); showMsg('好吃!谢谢你~ 😋'); };
+  const feedWithReward = () => { if (foodRewards <= 0) return; setFoodRewards(f => f - 1); setPetStats(p => ({ ...p, hunger: Math.min(100, p.hunger + 30), happiness: Math.min(100, p.happiness + 15) })); showMsg('哇!是奖励美食!太好吃啦! 🌟😋'); };
+  const playWithPet = () => { setPetStats(p => ({ ...p, happiness: Math.min(100, p.happiness + 20), hunger: Math.max(0, p.hunger - 5), health: Math.min(100, p.health + 5) })); showMsg('好开心!再玩一次吧! 🎉'); };
+  const restPet = () => { setPetStats(p => ({ ...p, health: Math.min(100, p.health + 15), happiness: Math.min(100, p.happiness + 5) })); showMsg('睡了个好觉,精神满满! 😴✨'); };
+
+  const startGame = () => {
+    if (petName.trim()) {
+      setGameStarted(true);
+      setChatHistory([{ type: 'pet', text: '你好呀!我是' + petName + '~ 很高兴认识你!' }]);
+      setTimeout(saveUserData, 100);
+    }
+  };
+
+  const handleChat = () => {
+    if (!chatMessage.trim()) return;
+    setChatHistory(prev => [...prev, { type: 'user', text: chatMessage }]);
+    const msg = chatMessage.toLowerCase();
+    setTimeout(() => {
+      let res = '';
+      if (msg.includes('你好') || msg.includes('hi')) res = '你好呀!今天过得怎么样? 😊';
+      else if (msg.includes('爱') || msg.includes('喜欢')) res = '我也超级喜欢你! ❤️';
+      else if (msg.includes('饿')) res = petStats.hunger < 30 ? '我好饿!能给我吃的吗? 🥺' : '我不饿呢! 😋';
+      else if (msg.includes('玩')) res = '好呀!我们一起玩吧! 🎮';
+      else if (msg.includes('累') || msg.includes('困')) res = '休息一下吧~ 💤';
+      else if (msg.includes('可爱')) res = '你也很可爱! (*^▽^*)';
+      else if (msg.includes('番茄')) res = '用番茄钟专注学习,完成有奖励哦~ 🍅';
+      else res = ['嗯嗯,我在听! 👂', '继续说说看~ 😊', '真的吗?不错! ✨'][Math.floor(Math.random() * 3)];
+      setChatHistory(prev => [...prev, { type: 'pet', text: res }]);
+    }, 500);
+    setChatMessage('');
+  };
+
+  const formatTime = (s) => Math.floor(s / 60).toString().padStart(2, '0') + ':' + (s % 60).toString().padStart(2, '0');
+
+  if (initialLoading) return <div className="min-h-screen bg-gradient-to-br from-pink-50 via-blue-50 to-purple-50 flex items-center justify-center"><div className="text-xl text-gray-600">加载中...</div></div>;
+
+  if (!currentUser) return (
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-blue-50 to-purple-50 flex items-center justify-center p-4">
+      <div className="bg-white/80 backdrop-blur rounded-3xl shadow-2xl p-8 max-w-md w-full">
+        <h1 className="text-3xl font-bold text-center mb-2 bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">AI电子宠物小站</h1>
+        <p className="text-center text-gray-500 mb-6">登录账号，数据永久保存 ✨</p>
+        <div className="flex mb-6 bg-gray-100 rounded-xl p-1">
+          <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className={'flex-1 py-2 rounded-lg transition ' + (authMode === 'login' ? 'bg-white shadow' : '')}>登录</button>
+          <button onClick={() => { setAuthMode('register'); setAuthError(''); }} className={'flex-1 py-2 rounded-lg transition ' + (authMode === 'register' ? 'bg-white shadow' : '')}>注册</button>
+        </div>
+        <div className="space-y-4">
+          <div><input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="用户名" className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-300 focus:outline-none" maxLength={20} /><p className="text-xs text-gray-400 mt-1 ml-1">2-20个字符</p></div>
+          <div><input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="密码" className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-300 focus:outline-none" onKeyPress={e => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())} maxLength={20} /><p className="text-xs text-gray-400 mt-1 ml-1">4-20位</p></div>
+          {authError && <p className="text-red-500 text-sm text-center bg-red-50 py-2 rounded-lg">{authError}</p>}
+          <button onClick={authMode === 'login' ? handleLogin : handleRegister} disabled={authLoading} className="w-full py-3 rounded-xl bg-gradient-to-r from-pink-400 to-purple-400 text-white font-semibold hover:shadow-lg transition disabled:opacity-50">{authLoading ? '处理中...' : (authMode === 'login' ? '登录' : '注册')}</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (!gameStarted) return (
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-blue-50 to-purple-50 flex items-center justify-center p-4">
+      <div className="bg-white/80 backdrop-blur rounded-3xl shadow-2xl p-8 max-w-2xl w-full">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">AI电子宠物小站</h1>
+          <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition text-gray-600"><Icon name="logOut" size={18} /><span className="text-sm">登出</span></button>
+        </div>
+        <div className="flex items-center gap-2 mb-6 text-gray-600"><Icon name="user" size={18} /><span>欢迎, {currentUser}</span></div>
+        <p className="text-center text-gray-600 mb-8">选择你的专属小伙伴吧 ✨</p>
+        {!showNameInput ? (
+          <div className="grid grid-cols-2 gap-4">
+            {pets.map(pet => (<button key={pet.id} onClick={() => { setSelectedPet(pet); setShowNameInput(true); }} className="p-6 rounded-2xl border-2 border-gray-200 hover:border-purple-300 hover:shadow-lg transition bg-white/50"><div className="text-6xl mb-2">{pet.emoji}</div><div className="font-semibold text-gray-700">{pet.name}</div></button>))}
+          </div>
+        ) : (
+          <div className="text-center">
+            <div className="text-7xl mb-4">{selectedPet.emoji}</div>
+            <p className="text-gray-600 mb-4">给你的{selectedPet.name}起个名字吧!</p>
+            <input type="text" value={petName} onChange={e => setPetName(e.target.value)} placeholder="输入名字..." className="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-300 focus:outline-none w-full max-w-xs mb-4" onKeyPress={e => e.key === 'Enter' && startGame()} />
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => setShowNameInput(false)} className="px-6 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 transition">返回</button>
+              <button onClick={startGame} className="px-6 py-2 rounded-xl bg-gradient-to-r from-pink-400 to-purple-400 text-white hover:shadow-lg transition">开始冒险!</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-blue-50 to-purple-50 p-4">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">{petName}的小窝</h1>
+          <div className="flex gap-3 items-center">
+            <div className="flex gap-4 bg-white/80 backdrop-blur rounded-xl px-4 py-2 shadow-lg">
+              <div className="flex items-center gap-1"><Icon name="award" size={18} className="text-yellow-500" /><span className="text-sm text-gray-700">{pomodoroCompleted}</span></div>
+              <div className="flex items-center gap-1"><Icon name="utensils" size={18} className="text-orange-500" /><span className="text-sm text-gray-700">{foodRewards}</span></div>
+            </div>
+            <button onClick={handleLogout} className="p-2 rounded-xl bg-white/80 hover:bg-gray-200 transition shadow-lg"><Icon name="logOut" size={18} className="text-gray-600" /></button>
+          </div>
+        </div>
+        {showReward && <div className="bg-gradient-to-r from-yellow-400 to-orange-400 text-white rounded-xl p-4 mb-4 shadow-lg text-center">🎉 恭喜完成番茄钟!获得1个美食奖励!</div>}
+        <div className="bg-white/80 backdrop-blur rounded-2xl p-4 mb-4 shadow-lg">
+          <div className="grid grid-cols-3 gap-4">
+            <div><div className="flex items-center gap-2 mb-1 text-sm text-gray-600"><Icon name="utensils" size={14} className="text-orange-400" /><span>饱食度</span></div><div className="h-3 bg-gray-200 rounded-full overflow-hidden"><div className="h-full bg-orange-400 transition-all" style={{ width: petStats.hunger + '%' }} /></div></div>
+            <div><div className="flex items-center gap-2 mb-1 text-sm text-gray-600"><Icon name="sparkles" size={14} className="text-pink-400" /><span>快乐度</span></div><div className="h-3 bg-gray-200 rounded-full overflow-hidden"><div className="h-full bg-pink-400 transition-all" style={{ width: petStats.happiness + '%' }} /></div></div>
+            <div><div className="flex items-center gap-2 mb-1 text-sm text-gray-600"><Icon name="heart" size={14} className="text-red-400" /><span>健康值</span></div><div className="h-3 bg-gray-200 rounded-full overflow-hidden"><div className="h-full bg-red-400 transition-all" style={{ width: petStats.health + '%' }} /></div></div>
+          </div>
+        </div>
+        <div className="bg-white/80 backdrop-blur rounded-2xl p-8 mb-4 shadow-lg relative flex flex-col items-center justify-center" style={{ minHeight: '280px' }}>
+          <div className="text-8xl mb-4 animate-bounce-slow">{selectedPet && selectedPet.emoji}</div>
+          {petResponse && <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg text-sm">{petResponse}</div>}
+          <div className="text-xl font-semibold text-gray-700 mb-2">{petName}</div>
+          <div className="flex items-center gap-2 text-gray-500"><Icon name="star" size={16} className="text-yellow-400" /><span className="text-sm">{petMood === 'happy' ? '开心 😊' : petMood === 'normal' ? '还好 😐' : '难过 😢'}</span></div>
+        </div>
+        <div className="grid grid-cols-5 gap-2 mb-4">
+          <button onClick={feedPet} className="bg-white/80 hover:bg-orange-100 p-3 rounded-xl shadow-lg transition flex flex-col items-center gap-1"><Icon name="utensils" size={20} className="text-orange-400" /><span className="text-xs text-gray-700">喂食</span></button>
+          <button onClick={feedWithReward} disabled={foodRewards <= 0} className={'p-3 rounded-xl shadow-lg transition flex flex-col items-center gap-1 ' + (foodRewards > 0 ? 'bg-yellow-100 hover:bg-yellow-200' : 'bg-gray-200 opacity-50')}><div className="relative"><Icon name="utensils" size={20} className="text-orange-500" />{foodRewards > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">{foodRewards}</span>}</div><span className="text-xs text-gray-700">奖励</span></button>
+          <button onClick={playWithPet} className="bg-white/80 hover:bg-pink-100 p-3 rounded-xl shadow-lg transition flex flex-col items-center gap-1"><Icon name="sparkles" size={20} className="text-pink-400" /><span className="text-xs text-gray-700">玩耍</span></button>
+          <button onClick={restPet} className="bg-white/80 hover:bg-blue-100 p-3 rounded-xl shadow-lg transition flex flex-col items-center gap-1"><Icon name="heart" size={20} className="text-blue-400" /><span className="text-xs text-gray-700">休息</span></button>
+          <button onClick={() => setPomodoroOpen(!pomodoroOpen)} className={'p-3 rounded-xl shadow-lg transition flex flex-col items-center gap-1 ' + (pomodoroOpen ? 'bg-green-200' : 'bg-white/80 hover:bg-green-100')}><Icon name="clock" size={20} className="text-green-500" /><span className="text-xs text-gray-700">番茄钟</span></button>
+        </div>
+        {pomodoroOpen && (
+          <div className="bg-white/80 backdrop-blur rounded-2xl p-6 mb-4 shadow-lg">
+            <h3 className="text-lg font-semibold text-gray-700 mb-4 text-center">🍅 专注番茄钟</h3>
+            {!pomodoroRunning && <div className="mb-4"><div className="flex gap-2 justify-center mb-3 flex-wrap">{[15, 25, 30, 45, 60].map(m => (<button key={m} onClick={() => { setCustomMinutes(m); setPomodoroTime(m * 60); }} className={'px-3 py-2 rounded-lg transition text-sm ' + (customMinutes === m ? 'bg-green-400 text-white' : 'bg-gray-100 hover:bg-gray-200')}>{m}分</button>))}</div></div>}
+            <div className="text-center mb-4"><div className="text-5xl font-bold text-green-600 mb-2">{formatTime(pomodoroTime)}</div><p className="text-sm text-gray-500">{pomodoroRunning ? '专注中...' : '准备开始'}</p></div>
+            <div className="flex justify-center gap-3">
+              {!pomodoroRunning ? <button onClick={() => setPomodoroRunning(true)} className="px-5 py-2 rounded-xl bg-green-400 text-white hover:bg-green-500 transition flex items-center gap-2"><Icon name="play" size={18} />开始</button> : <button onClick={() => setPomodoroRunning(false)} className="px-5 py-2 rounded-xl bg-orange-400 text-white hover:bg-orange-500 transition flex items-center gap-2"><Icon name="pause" size={18} />暂停</button>}
+              <button onClick={() => { setPomodoroRunning(false); setPomodoroTime(customMinutes * 60); }} className="px-5 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 transition flex items-center gap-2"><Icon name="rotateCcw" size={18} />重置</button>
+            </div>
+            <div className="mt-4 p-3 bg-green-50 rounded-xl text-sm text-gray-600 text-center">💡 完成番茄钟可获得美食奖励!</div>
+          </div>
+        )}
+        <button onClick={() => setChatOpen(!chatOpen)} className="w-full bg-white/80 hover:bg-purple-100 p-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 mb-4"><Icon name="messageCircle" size={20} className="text-purple-400" /><span className="text-gray-700">{chatOpen ? '收起聊天' : '和宠物聊天'}</span></button>
+        {chatOpen && (
+          <div className="bg-white/80 backdrop-blur rounded-2xl p-4 shadow-lg">
+            <div className="h-48 overflow-y-auto mb-3 space-y-2">{chatHistory.map((msg, i) => (<div key={i} className={'flex ' + (msg.type === 'user' ? 'justify-end' : 'justify-start')}><div className={'px-4 py-2 rounded-2xl max-w-xs ' + (msg.type === 'user' ? 'bg-gradient-to-r from-purple-400 to-pink-400 text-white' : 'bg-gray-100 text-gray-700')}>{msg.text}</div></div>))}</div>
+            <div className="flex gap-2"><input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleChat()} placeholder="跟宠物说点什么..." className="flex-1 px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-purple-300 focus:outline-none" /><button onClick={handleChat} className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-400 to-pink-400 text-white hover:shadow-lg transition">发送</button></div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<PixelPet />, document.getElementById('root'));
+</script>
+</body>
+</html>
